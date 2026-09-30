@@ -25,7 +25,6 @@ export function Avatar({ pose }: AvatarProps) {
 
   const [mixer] = useState(() => new THREE.AnimationMixer(scene));
   const actionsRef = useRef<Record<string, THREE.AnimationAction>>({});
-  const activeActionRef = useRef<THREE.AnimationAction | null>(null);
 
   useEffect(() => {
     const fbxMap: Record<string, THREE.Group> = {
@@ -42,14 +41,15 @@ export function Avatar({ pose }: AvatarProps) {
       if (fbx.animations.length > 0) {
         const clip = fbx.animations[0].clone();
 
-        // Filtra estritamente todas as posições dos ossos para eliminar deslocamentos no ar
+        // Remove posições do osso raiz para não mover o avatar do sítio
         clip.tracks = clip.tracks.filter((track) => !track.name.endsWith('.position'));
 
         const action = mixer.clipAction(clip, scene);
 
+        // Se for uma animação de gesto (Wave, Point, AngryPoint), toca apenas 1 vez
         if (['Wave', 'Point', 'AngryPoint'].includes(name)) {
           action.setLoop(THREE.LoopOnce, 1);
-          action.clampWhenFinished = true;
+          action.clampWhenFinished = true; // Mantém a postura final
         }
 
         actionsRef.current[name] = action;
@@ -59,16 +59,16 @@ export function Avatar({ pose }: AvatarProps) {
     const initialAction = actionsRef.current[pose] || actionsRef.current['Idle'];
     if (initialAction) {
       initialAction.play();
-      activeActionRef.current = initialAction;
     }
 
-    // Ao término de uma animação de disparo único, transiciona suavemente de volta para Idle
+    // Listener para voltar a "Idle" suavemente assim que o gesto de 1 única execução terminar
     const handleFinished = (e: any) => {
-      const idleAction = actionsRef.current['Idle'];
-      if (e.action !== idleAction && idleAction) {
-        idleAction.reset().play();
-        e.action.crossFadeTo(idleAction, 0.5, false);
-        activeActionRef.current = idleAction;
+      if (e.action !== actionsRef.current['Idle']) {
+        const idleAction = actionsRef.current['Idle'];
+        if (idleAction) {
+          e.action.fadeOut(0.5);
+          idleAction.reset().fadeIn(0.5).play();
+        }
       }
     };
 
@@ -80,19 +80,16 @@ export function Avatar({ pose }: AvatarProps) {
     };
   }, [scene, mixer, idleFBX, walkingFBX, talkingFBX, pointingFBX, wavingFBX, angryPointFBX]);
 
-  // Transição contínua e sem sobressaltos entre poses ao mudar de etapa
   useEffect(() => {
     const nextAction = actionsRef.current[pose] || actionsRef.current['Idle'];
-    const currentAction = activeActionRef.current;
 
-    if (nextAction && nextAction !== currentAction) {
-      nextAction.reset().play();
-      
-      if (currentAction) {
-        currentAction.crossFadeTo(nextAction, 0.4, false);
-      }
-      
-      activeActionRef.current = nextAction;
+    if (nextAction) {
+      Object.values(actionsRef.current).forEach((action) => {
+        if (action !== nextAction) {
+          action.fadeOut(0.3);
+        }
+      });
+      nextAction.reset().fadeIn(0.3).play();
     }
   }, [pose]);
 
@@ -100,13 +97,13 @@ export function Avatar({ pose }: AvatarProps) {
     mixer.update(delta);
 
     if (group.current) {
-      // Movimento suave acompanhando o cursor no eixo Y (rotação horizontal)
+      // Rotação sutil com base na posição X do rato
       const mouseX = state.pointer.x;
-      const targetRotationY = mouseX * 0.3;
+      const targetRotationZ = mouseX * 0.4;
 
-      group.current.rotation.y = THREE.MathUtils.lerp(
-        group.current.rotation.y,
-        targetRotationY,
+      group.current.rotation.z = THREE.MathUtils.lerp(
+        group.current.rotation.z,
+        targetRotationZ,
         0.08
       );
     }
@@ -115,19 +112,13 @@ export function Avatar({ pose }: AvatarProps) {
   return (
     <group 
       ref={group} 
-      position={[0, -1.6, 0]} 
-      scale={[1.8, 1.8, 1.8]}
+      position={[0, 0.2, 0]} 
+      rotation={[-Math.PI / 2, 0, 0]} 
+      scale={[1.6, 1.6, 1.6]}
     >
       <primitive object={scene} />
     </group>
   );
 }
 
-// Pré-carregamento do modelo e de todas as animações para evitar travamentos/demoras na página
 useGLTF.preload('/models/avatar.glb');
-useLoader.preload(FBXLoader, '/models/Animations/Idle.fbx');
-useLoader.preload(FBXLoader, '/models/Animations/Walking.fbx');
-useLoader.preload(FBXLoader, '/models/Animations/Talking.fbx');
-useLoader.preload(FBXLoader, '/models/Animations/Pointing.fbx');
-useLoader.preload(FBXLoader, '/models/Animations/Waving Gesture.fbx');
-useLoader.preload(FBXLoader, '/models/Animations/Angry Point.fbx');
