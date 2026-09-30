@@ -13,10 +13,9 @@ interface AvatarProps {
 export function Avatar({ pose }: AvatarProps) {
   const group = useRef<THREE.Group>(null);
 
-  // Carrega o modelo GLTF principal do avatar
   const { scene } = useGLTF('/models/avatar.glb');
 
-  // Carregamento síncrono seguro das animações FBX
+  // Carregamento das animações FBX
   const idleFBX = useLoader(FBXLoader, '/models/Animations/Idle.fbx');
   const walkingFBX = useLoader(FBXLoader, '/models/Animations/Walking.fbx');
   const talkingFBX = useLoader(FBXLoader, '/models/Animations/Talking.fbx');
@@ -40,10 +39,10 @@ export function Avatar({ pose }: AvatarProps) {
     };
 
     Object.entries(fbxMap).forEach(([name, fbx]) => {
-      if (fbx && fbx.animations && fbx.animations.length > 0) {
+      if (fbx.animations.length > 0) {
         const clip = fbx.animations[0].clone();
 
-        // Filtra posições para evitar sobressaltos e manter o avatar fixo no chão
+        // Filtra estritamente todas as posições dos ossos para eliminar deslocamentos no ar
         clip.tracks = clip.tracks.filter((track) => !track.name.endsWith('.position'));
 
         const action = mixer.clipAction(clip, scene);
@@ -63,6 +62,7 @@ export function Avatar({ pose }: AvatarProps) {
       activeActionRef.current = initialAction;
     }
 
+    // Ao término de uma animação de disparo único (como acenar ou apontar), transiciona suavemente de volta para Idle
     const handleFinished = (e: any) => {
       const idleAction = actionsRef.current['Idle'];
       if (e.action !== idleAction && idleAction) {
@@ -80,18 +80,18 @@ export function Avatar({ pose }: AvatarProps) {
     };
   }, [scene, mixer, idleFBX, walkingFBX, talkingFBX, pointingFBX, wavingFBX, angryPointFBX]);
 
-  // Transição suave de poses
+  // Transição contínua e sem sobressaltos ("recarregamento") entre poses ao mudar de etapa
   useEffect(() => {
     const nextAction = actionsRef.current[pose] || actionsRef.current['Idle'];
     const currentAction = activeActionRef.current;
 
     if (nextAction && nextAction !== currentAction) {
       nextAction.reset().play();
-
+      
       if (currentAction) {
         currentAction.crossFadeTo(nextAction, 0.4, false);
       }
-
+      
       activeActionRef.current = nextAction;
     }
   }, [pose]);
@@ -100,13 +100,13 @@ export function Avatar({ pose }: AvatarProps) {
     mixer.update(delta);
 
     if (group.current) {
-      // Movimento suave de rotação no eixo Y com o mouse
+      // Movimento suave acompanhando o cursor no eixo Z
       const mouseX = state.pointer.x;
-      const targetRotationY = mouseX * 0.4;
+      const targetRotationZ = mouseX * 0.4;
 
-      group.current.rotation.y = THREE.MathUtils.lerp(
-        group.current.rotation.y,
-        targetRotationY,
+      group.current.rotation.z = THREE.MathUtils.lerp(
+        group.current.rotation.z,
+        targetRotationZ,
         0.08
       );
     }
@@ -115,14 +115,13 @@ export function Avatar({ pose }: AvatarProps) {
   return (
     <group 
       ref={group} 
-      position={[0, -2.4, 0]} 
-      rotation={[0, 0, 0]} 
-      scale={[2.4, 2.4, 2.4]}
+      position={[0, 0.2, 0]} 
+      rotation={[-Math.PI / 2, 0, 0]} 
+      scale={[1.6, 1.6, 1.6]}
     >
       <primitive object={scene} />
     </group>
   );
 }
 
-// Pré-carregamento dos assets para evitar travamentos
 useGLTF.preload('/models/avatar.glb');
