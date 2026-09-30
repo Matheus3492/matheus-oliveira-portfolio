@@ -62,7 +62,7 @@ export function Avatar({ pose }: AvatarProps) {
       activeActionRef.current = initialAction;
     }
 
-    // Ao término de uma animação de disparo único (como acenar ou apontar), transiciona suavemente de volta para Idle
+    // Ao término de uma animação de disparo único, transiciona suavemente de volta para Idle
     const handleFinished = (e: any) => {
       const idleAction = actionsRef.current['Idle'];
       if (e.action !== idleAction && idleAction) {
@@ -80,7 +80,7 @@ export function Avatar({ pose }: AvatarProps) {
     };
   }, [scene, mixer, idleFBX, walkingFBX, talkingFBX, pointingFBX, wavingFBX, angryPointFBX]);
 
-  // Transição contínua e sem sobressaltos ("recarregamento") entre poses ao mudar de etapa
+  // Transição contínua e sem sobressaltos entre poses ao mudar de etapa
   useEffect(() => {
     const nextAction = actionsRef.current[pose] || actionsRef.current['Idle'];
     const currentAction = activeActionRef.current;
@@ -100,13 +100,13 @@ export function Avatar({ pose }: AvatarProps) {
     mixer.update(delta);
 
     if (group.current) {
-      // Movimento suave acompanhando o cursor no eixo Z
+      // Movimento suave acompanhando o cursor no eixo Y (rotação horizontal)
       const mouseX = state.pointer.x;
-      const targetRotationZ = mouseX * 0.4;
+      const targetRotationY = mouseX * 0.3;
 
-      group.current.rotation.z = THREE.MathUtils.lerp(
-        group.current.rotation.z,
-        targetRotationZ,
+      group.current.rotation.y = THREE.MathUtils.lerp(
+        group.current.rotation.y,
+        targetRotationY,
         0.08
       );
     }
@@ -115,13 +115,19 @@ export function Avatar({ pose }: AvatarProps) {
   return (
     <group 
       ref={group} 
-      position={[0, 0.2, 0]} 
-      rotation={[-Math.PI / 2, 0, 0]} 
-      scale={[1.6, 1.6, 1.6]}
+      position={[0, -1.6, 0]} 
+      scale={[1.8, 1.8, 1.8]}
     >
       <primitive object={scene} />
     </group>
   );
 }
 
+// Pré-carregamento do modelo e de todas as animações para evitar travamentos/demoras na página
 useGLTF.preload('/models/avatar.glb');
+useLoader.preload(FBXLoader, '/models/Animations/Idle.fbx');
+useLoader.preload(FBXLoader, '/models/Animations/Walking.fbx');
+useLoader.preload(FBXLoader, '/models/Animations/Talking.fbx');
+useLoader.preload(FBXLoader, '/models/Animations/Pointing.fbx');
+useLoader.preload(FBXLoader, '/models/Animations/Waving Gesture.fbx');
+useLoader.preload(FBXLoader, '/models/Animations/Angry Point.fbx');
