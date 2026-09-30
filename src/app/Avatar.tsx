@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, Suspense } from 'react';
 import { useGLTF } from '@react-three/drei';
 import { useFrame, useLoader } from '@react-three/fiber';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
@@ -13,6 +13,7 @@ interface AvatarProps {
 export function Avatar({ pose }: AvatarProps) {
   const group = useRef<THREE.Group>(null);
 
+  // Carrega o modelo GLTF principal do avatar
   const { scene } = useGLTF('/models/avatar.glb');
 
   // Carregamento das animações FBX
@@ -25,6 +26,7 @@ export function Avatar({ pose }: AvatarProps) {
 
   const [mixer] = useState(() => new THREE.AnimationMixer(scene));
   const actionsRef = useRef<Record<string, THREE.AnimationAction>>({});
+  const activeActionRef = useRef<THREE.AnimationAction | null>(null);
 
   useEffect(() => {
     const fbxMap: Record<string, THREE.Group> = {
@@ -38,18 +40,17 @@ export function Avatar({ pose }: AvatarProps) {
     };
 
     Object.entries(fbxMap).forEach(([name, fbx]) => {
-      if (fbx.animations.length > 0) {
+      if (fbx && fbx.animations && fbx.animations.length > 0) {
         const clip = fbx.animations[0].clone();
 
-        // Remove posições do osso raiz para não mover o avatar do sítio
+        // Filtra posições para evitar sobressaltos e manter o avatar fixo no chão
         clip.tracks = clip.tracks.filter((track) => !track.name.endsWith('.position'));
 
         const action = mixer.clipAction(clip, scene);
 
-        // Se for uma animação de gesto (Wave, Point, AngryPoint), toca apenas 1 vez
         if (['Wave', 'Point', 'AngryPoint'].includes(name)) {
           action.setLoop(THREE.LoopOnce, 1);
-          action.clampWhenFinished = true; // Mantém a postura final
+          action.clampWhenFinished = true;
         }
 
         actionsRef.current[name] = action;
@@ -59,16 +60,15 @@ export function Avatar({ pose }: AvatarProps) {
     const initialAction = actionsRef.current[pose] || actionsRef.current['Idle'];
     if (initialAction) {
       initialAction.play();
+      activeActionRef.current = initialAction;
     }
 
-    // Listener para voltar a "Idle" suavemente assim que o gesto de 1 única execução terminar
     const handleFinished = (e: any) => {
-      if (e.action !== actionsRef.current['Idle']) {
-        const idleAction = actionsRef.current['Idle'];
-        if (idleAction) {
-          e.action.fadeOut(0.5);
-          idleAction.reset().fadeIn(0.5).play();
-        }
+      const idleAction = actionsRef.current['Idle'];
+      if (e.action !== idleAction && idleAction) {
+        idleAction.reset().play();
+        e.action.crossFadeTo(idleAction, 0.5, false);
+        activeActionRef.current = idleAction;
       }
     };
 
@@ -80,16 +80,19 @@ export function Avatar({ pose }: AvatarProps) {
     };
   }, [scene, mixer, idleFBX, walkingFBX, talkingFBX, pointingFBX, wavingFBX, angryPointFBX]);
 
+  // Transição suave de poses
   useEffect(() => {
     const nextAction = actionsRef.current[pose] || actionsRef.current['Idle'];
+    const currentAction = activeActionRef.current;
 
-    if (nextAction) {
-      Object.values(actionsRef.current).forEach((action) => {
-        if (action !== nextAction) {
-          action.fadeOut(0.3);
-        }
-      });
-      nextAction.reset().fadeIn(0.3).play();
+    if (nextAction && nextAction !== currentAction) {
+      nextAction.reset().play();
+      
+      if (currentAction) {
+        currentAction.crossFadeTo(nextAction, 0.4, false);
+      }
+      
+      activeActionRef.current = nextAction;
     }
   }, [pose]);
 
@@ -97,13 +100,13 @@ export function Avatar({ pose }: AvatarProps) {
     mixer.update(delta);
 
     if (group.current) {
-      // Rotação sutil com base na posição X do rato
+      // Movimento suave de rotação no eixo Y com o mouse
       const mouseX = state.pointer.x;
-      const targetRotationZ = mouseX * 0.4;
+      const targetRotationY = mouseX * 0.4;
 
-      group.current.rotation.z = THREE.MathUtils.lerp(
-        group.current.rotation.z,
-        targetRotationZ,
+      group.current.rotation.y = THREE.MathUtils.lerp(
+        group.current.rotation.y,
+        targetRotationY,
         0.08
       );
     }
@@ -112,13 +115,14 @@ export function Avatar({ pose }: AvatarProps) {
   return (
     <group 
       ref={group} 
-      position={[0, 0.2, 0]} 
-      rotation={[-Math.PI / 2, 0, 0]} 
-      scale={[1.6, 1.6, 1.6]}
+      position={[0, -1.8, 0]} 
+      rotation={[0, 0, 0]} 
+      scale={[1.8, 1.8, 1.8]}
     >
       <primitive object={scene} />
     </group>
   );
 }
 
+// Pré-carregamento dos assets
 useGLTF.preload('/models/avatar.glb');
