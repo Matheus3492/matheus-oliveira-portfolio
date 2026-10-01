@@ -117,7 +117,7 @@ export function Avatar({ pose }: AvatarProps) {
       ref={group} 
       position={[0, 0.2, 0]} 
       rotation={[-Math.PI / 2, 0, 0]} 
-      scale={[1.6, 1.6, 1.6]}
+      scale={[1.8, 1.8, 1.8]}
     >
       <primitive object={scene} />
     </group>
